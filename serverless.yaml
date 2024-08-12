@@ -40,4 +40,9 @@ custom:
 
 package:
   patterns:
-    - '!node_modules/**'
+    - '!src/**'
+    - '!scripts/**'
+    - '!tests/**'
+    - '!serverless.yaml'
+    - '!README.md'
+    - '!LICENSE'
