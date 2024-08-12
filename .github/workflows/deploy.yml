@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Install nestjs cli
+        run: npm install -g @nestjs/cli
+
       - name: Build lambda function
         run: npm run build
 
