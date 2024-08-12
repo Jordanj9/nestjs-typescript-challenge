@@ -33,8 +33,11 @@ functions:
           path: /{proxy+}
 
 custom:
-#  secrets: ${file(./config/${self:provider.stage}.json)} # reference the secrets.json file
   supersecret: ${ssm:/aws/reference/secretsmanager/sales}
   stage: ${opt:stage, 'dev'}
   optimize:
     external: ['swagger-ui-dist']
+
+package:
+  patterns:
+    - '!node_modules/**'
