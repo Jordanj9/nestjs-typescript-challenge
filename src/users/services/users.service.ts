@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 import { User } from '../models/user.entity';
 import { CreateUserDto } from '../../auth/controllers/dto/create-user.dto';
 import * as bcrypt from 'bcryptjs';
+import {UpdateUserDto} from "../controllers/dto/update-user.dto";
 
+// @ts-ignore
 @Injectable()
 export class UsersService {
   constructor(@InjectRepository(User) private repository: Repository<User>) {}
@@ -29,5 +31,13 @@ export class UsersService {
 
   async comparePassword(password: string, hash: string) {
     return await bcrypt.compare(password, hash);
+  }
+  async findOneById(id: number): Promise<User | undefined> {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    return this.repository.findOne({ where: { id } });
+  }
+  async assignRole(user: User, role: string) {
+    user.role = role;
+    return await this.repository.save(user);
   }
 }
