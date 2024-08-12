@@ -1,0 +1,30 @@
+name: lambda-deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lambda-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout to repo
+        uses: actions/checkout@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '18.x'
+
+      - name: Install serverless globally
+        run: npm install -g serverless
+
+      - name: Configure serverless authentication
+        run: sls config credentials --provider aws --key ${{ secrets.AWS_ACCESS_KEY_ID }} --secret ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Deploy lambda function
+        run: sls deploy
