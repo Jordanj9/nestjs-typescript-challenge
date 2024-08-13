@@ -74,7 +74,6 @@ export class UsersController {
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     return this.usersService.assignRole(user, updateUserDto.role);
   }
 }
