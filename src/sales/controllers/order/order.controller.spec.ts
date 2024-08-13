@@ -1,7 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Request } from 'express';
-import { Order } from '../../models/order.entity';
 import { OrderService } from '../../services/order/order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';

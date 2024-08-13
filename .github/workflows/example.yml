@@ -1,0 +1,193 @@
+name: ci-cd-pipeline-api
+
+on:
+  push:
+    branches: [integration, master]
+    paths: ['api/**']
+
+env:
+  PROJECT_DIRECTORY: api
+  APPLICATION_NAME: "foundation_common_report_api"
+  SLACK_TEAM_GROUP: "<!subteam^S2A5WDHHP|@foundation>"
+  NODE_AUTH_TOKEN: ${{ secrets.CEB_CICD_V2_GITHUB_TOKEN }}
+
+jobs:
+  env-variables:
+    runs-on: "ubuntu-latest"
+    outputs:
+      environment: "${{ steps.set-vars.outputs.environment }}"
+      deployment-api-url: "${{ steps.set-vars.outputs.deployment-api-url }}"
+      deployment-api-auth-name: "${{ steps.set-vars.outputs.deployment-api-auth-name }}"
+      slack-channel: "${{ steps.set-vars.outputs.slack-channel }}"
+      slack-webhook: "${{ steps.set-vars.outputs.slack-webhook }}"
+      apps-inventory-url: "${{ steps.set-vars.outputs.apps-inventory-url }}"
+      apps-inventory-auth-name: "${{ steps.set-vars.outputs.apps-inventory-auth-name }}"
+
+    steps:
+      - name: Set variables
+        id: set-vars
+        run: |
+          if [[ "${{ github.base_ref }}" == "master" || "${{ github.ref }}" == "refs/heads/master" || "${{ github.base_ref }}" == "main" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=demo" >> $GITHUB_OUTPUT
+            echo "deployment-api-url=CEB_DEPLOYMENT_API_ACTION_DEMO" >> $GITHUB_OUTPUT
+            echo "slack-channel=CEB_CICD_SLACK_CHANNEL_DEMO" >> $GITHUB_OUTPUT
+            echo "slack-webhook=CEB_CICD_SLACK_WEBHOOK_DEMO" >> $GITHUB_OUTPUT
+            echo "apps-inventory-url=CEB_APPS_INVENTORY_URL_DEMO" >> $GITHUB_OUTPUT
+            echo "apps-inventory-auth-name=CEB_APPS_INVENTORY_AUTH_DEMO" >> $GITHUB_OUTPUT
+            echo "deployment-api-auth-name=CEB_DEPLOYMENT_API_AUTH_DEMO" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "${{ github.ref }}" == "refs/heads/integration" || "${{ github.base_ref }}" == "integration" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "deployment-api-url=CEB_DEPLOYMENT_API_ACTION_TEST" >> $GITHUB_OUTPUT
+            echo "slack-channel=CEB_CICD_SLACK_CHANNEL_TEST" >> $GITHUB_OUTPUT
+            echo "slack-webhook=CEB_CICD_SLACK_WEBHOOK_TEST" >> $GITHUB_OUTPUT
+            echo "apps-inventory-url=CEB_APPS_INVENTORY_URL_TEST" >> $GITHUB_OUTPUT
+            echo "apps-inventory-auth-name=CEB_APPS_INVENTORY_AUTH_TEST" >> $GITHUB_OUTPUT
+            echo "deployment-api-auth-name=CEB_DEPLOYMENT_API_AUTH_TEST" >> $GITHUB_OUTPUT
+          fi
+
+  cicd-green-checks:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.share-status.outputs.status }}
+    strategy:
+      matrix:
+        node-version:
+          - "14.17.6"
+    steps:
+      - uses: "actions/checkout@v3"
+      - name: "Using Node.js ${{ matrix.node-version }}"
+        uses: "actions/setup-node@v3"
+        with:
+          node-version: "${{ matrix.node-version }}"
+          cache: 'npm'
+          registry-url: https://npm.pkg.github.com/
+          scope: '@cebroker'
+      - name: "Update npm"
+        run: "npm install -g npm@7"
+
+      - name: "Install dependencies for matchbox"
+        run: "npm i"
+
+      - name: "Run linter"
+        run: "npm run lint"
+
+      - name: "Install dependencies"
+        run: |
+          cd ${{ env.PROJECT_DIRECTORY }}
+          npm i --legacy-peer-deps
+
+      - name: "Run tests"
+        run: "cd ${{ env.PROJECT_DIRECTORY }} && npm run test:ci"
+
+      - name: "Check coverage"
+        uses: "VeryGoodOpenSource/very_good_coverage@v2"
+        with:
+          path: "${{ env.PROJECT_DIRECTORY }}/coverage/lcov.info"
+          min_coverage: 50
+
+      - id: "share-status"
+        name: "Share status"
+        run: echo "status=success" >> $GITHUB_OUTPUT
+
+  health-availability:
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 2
+    outputs:
+      status: "${{ steps.share-status.outputs.status }}"
+    needs:
+      - "env-variables"
+      - "cicd-green-checks"
+    steps:
+      - name: "Checking Service Availability"
+        uses: "cebroker/health-availability-action@master"
+        with:
+          apps_inventory_url: "${{ secrets[needs.env-variables.outputs.apps-inventory-url] }}/apps/${{ env.APPLICATION_NAME }}?sections=health&secondsAgo=30"
+          apps_inventory_auth: "${{ secrets[needs.env-variables.outputs.apps-inventory-auth-name] }}"
+          allow_warn_as_passed: true
+          availability_percentage: 80
+      - id: "share-status"
+        name: "Share status"
+        run: echo "status=success" >> $GITHUB_OUTPUT
+  deploy:
+    if: "contains(github.event.head_commit.message, 'skip-deploy') != true"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 1
+    outputs:
+      status: "${{ steps.share-status.outputs.status }}"
+      response: "${{ steps.schedule-deployment.outputs.response }}"
+    needs:
+      - "env-variables"
+      - "cicd-green-checks"
+      - "health-availability"
+    steps:
+      - name: "Schedule deployment"
+        id: "schedule-deployment"
+        uses: "fjogeleit/http-request-action@main"
+        with:
+          url: ${{ env.DEPLOYMENT_API }}
+          method: POST
+          customHeaders: '{"x-api-key": "${{ secrets[needs.env-variables.outputs.deployment-api-auth-name] }}"}'
+          data: '{ "service": "${{env.APPLICATION_NAME}}", "commit": "${{ github.event.head_commit.id }}", "command": "deploy", "location": "all", "username": "${{ env.USER_NAME }}", "userId": "${{ env.SLACK_TEAM_GROUP }}" }'
+        env:
+          USER_NAME: ${{ github.actor }}
+          DEPLOYMENT_API:  ${{ secrets[needs.env-variables.outputs.deployment-api-url] }}
+      - id: "share-status"
+        name: "Share status"
+        run: echo "status=success" >> $GITHUB_OUTPUT
+  notify-success:
+    if: "success()"
+    timeout-minutes: 1
+    needs:
+      - "env-variables"
+      - "cicd-green-checks"
+      - "health-availability"
+      - "deploy"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Send success notification"
+        uses: "rtCamp/action-slack-notify@v2"
+        env:
+          SLACK_CHANNEL: "${{ secrets[needs.env-variables.outputs.slack-channel] }}"
+          SLACK_COLOR: "#00A950"
+          SLACK_MESSAGE: ":rocket: :tada: :calendar: Deployment was scheduled successfully!"
+          SLACK_TITLE: "CI/CD Status ${{ env.PROJECT_DIRECTORY }}"
+          SLACK_USERNAME: "Deployments CEB Test."
+          SLACK_WEBHOOK: "${{ secrets[needs.env-variables.outputs.slack-webhook] }}"
+  notify-error:
+    if: "failure()"
+    timeout-minutes: 1
+    needs:
+      - "env-variables"
+      - "cicd-green-checks"
+      - "health-availability"
+      - "deploy"
+    runs-on: "ubuntu-latest"
+    steps:
+      - id: "build-message"
+        name: "Build message"
+        run: |
+          MESSAGE=" \
+            $(if [[ $green_checks_status == 'success' ]]; then echo ':large_green_circle:'; else echo ':red_circle:'; fi; )  *Green-check* → \
+            $(if [[ $health_availability_status == 'success' ]]; then echo ':large_green_circle:'; else echo ':red_circle:'; fi; )  *Health Monitor* → \
+            $(if [[ $deploy_status == 'success' ]]; then echo ':large_green_circle:'; else echo ':red_circle:'; fi; )  *Deploy* \
+          ";
+          if [[ $deploy_response != '' ]]; then
+            MESSAGE="$MESSAGE *Response:* \`$deploy_response\`";
+          fi
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT;
+        env:
+          green_checks_status: "${{ needs.cicd-green-checks.outputs.status }}"
+          health_availability_status: "${{ needs.health-availability.outputs.status }}"
+          deploy_status: "${{ needs.deploy.outputs.status }}"
+          deploy_response: "${{ needs.deploy.outputs.response }}"
+      - name: "Send error notification"
+        uses: "rtCamp/action-slack-notify@v2"
+        env:
+          SLACK_CHANNEL: "${{ secrets[needs.env-variables.outputs.slack-channel] }}"
+          SLACK_COLOR: "#DE350B"
+          SLACK_MESSAGE: ":rocket: :boom: :calendar: Deployment could not be scheduled due to a failure in the following step: ${{ steps.build-message.outputs.message }}"
+          SLACK_TITLE: "CI/CD Status ${{ env.PROJECT_DIRECTORY }}"
+          SLACK_USERNAME: "Deployments CEB ${{needs.env-variables.outputs.environment}}"
+          SLACK_WEBHOOK: "${{ secrets[needs.env-variables.outputs.slack-webhook] }}"

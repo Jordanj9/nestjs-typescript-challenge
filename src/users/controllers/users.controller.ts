@@ -2,12 +2,10 @@ import {
   Body,
   Param,
   Controller,
-  HttpCode,
   HttpException,
   HttpStatus,
   Patch,
   Get,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -53,7 +51,6 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
-  // @ts-ignore
   @Patch('assign-role/:id')
   @Roles(['admin'])
   @ApiOperation({ summary: 'Asign Role' })

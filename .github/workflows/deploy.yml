@@ -6,8 +6,54 @@ on:
       - main
 
 jobs:
+  cicd-green-checks:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.share-status.outputs.status }}
+    strategy:
+      matrix:
+        node-version:
+          - '18.x'
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Update npm
+        run: npm install -g npm@7.x
+
+      - name: Install dependencies for matchbox
+        run: npm install
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Run integration tests
+        run: npm run test:e2e
+
+      - name: Check coverage
+        uses: VeryGoodOpenSource/very_good_coverage@v2
+        with:
+          path: './coverage/lcov.info'
+          min_coverage: 50
+
+      - id: share-status
+        name: Share status
+        run: echo "status=success" >> $GITHUB_OUTPUT
+
   lambda-deploy:
     runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.share-status.outputs.status }}
+    needs:
+      - cicd-green-checks
     steps:
       - name: Checkout to repo
         uses: actions/checkout@v2
@@ -36,3 +82,6 @@ jobs:
 
       - name: Deploy lambda function
         run: sls deploy
+      - id: share-status
+        name: Share status
+        run: echo "status=success" >> $GITHUB_OUTPUT

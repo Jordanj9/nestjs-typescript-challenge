@@ -5,7 +5,6 @@ import { User } from '../models/user.entity';
 import { CreateUserDto } from '../../auth/controllers/dto/create-user.dto';
 import * as bcrypt from 'bcryptjs';
 
-// @ts-ignore
 @Injectable()
 export class UsersService {
   constructor(@InjectRepository(User) private repository: Repository<User>) {}
