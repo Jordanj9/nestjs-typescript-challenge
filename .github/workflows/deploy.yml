@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Run unit tests
-        run: npm run test
+      - name: Run unit tests and coverage
+        run: npm run test && npm run test:cov
 
       - name: Check coverage
         uses: VeryGoodOpenSource/very_good_coverage@v2
