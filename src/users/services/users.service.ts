@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { User } from '../models/user.entity';
 import { CreateUserDto } from '../../auth/controllers/dto/create-user.dto';
 import * as bcrypt from 'bcryptjs';
-import {UpdateUserDto} from "../controllers/dto/update-user.dto";
 
 // @ts-ignore
 @Injectable()
@@ -38,6 +37,12 @@ export class UsersService {
   }
   async assignRole(user: User, role: string) {
     user.role = role;
-    return await this.repository.save(user);
+    return await this.repository.update(user.id, user);
+  }
+
+  async findAll(): Promise<User[] | undefined> {
+    return await this.repository.find({
+      select: ['id', 'firstName', 'lastName', 'email', 'role', 'createAt'],
+    });
   }
 }

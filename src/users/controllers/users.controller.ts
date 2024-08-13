@@ -6,6 +6,7 @@ import {
   HttpException,
   HttpStatus,
   Patch,
+  Get,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -20,7 +21,7 @@ import { UsersService } from '../services/users.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateResult } from 'typeorm';
-import { Roles } from "../../auth/decorator/roles.decorador";
+import { Roles } from '../../auth/decorator/roles.decorador';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -29,7 +30,31 @@ import { Roles } from "../../auth/decorator/roles.decorador";
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Patch(':id')
+  @Get()
+  @Roles(['admin'])
+  @ApiOperation({ summary: 'Get all users' })
+  @ApiResponse({
+    status: 200,
+    description: 'Get an array with all users',
+    schema: {
+      example: [
+        {
+          id: 1,
+          firstName: 'admin',
+          lastName: 'admin',
+          email: 'admin@example.com',
+          role: 'admin',
+          createAt: new Date('2022-01-01T00:00:00.000Z'),
+        },
+      ],
+    },
+  })
+  async findAll() {
+    return this.usersService.findAll();
+  }
+
+  // @ts-ignore
+  @Patch('assign-role/:id')
   @Roles(['admin'])
   @ApiOperation({ summary: 'Asign Role' })
   @ApiBody({ type: UpdateUserDto })
@@ -53,17 +78,6 @@ export class UsersController {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error
     return this.usersService.assignRole(user, updateUserDto.role);
-  }
-
-  @HttpCode(HttpStatus.NOT_FOUND)
-  @UseGuards(JwtAuthGuard)
-  async findOne(@Req() req) {
-    const user = await this.usersService.findOneById(req.user.id);
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
-    return user;
   }
 }
